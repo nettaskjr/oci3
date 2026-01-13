@@ -123,3 +123,21 @@ until kubectl get crd ingressroutes.traefik.io > /dev/null 2>&1; do
 done
 # Wait para garantir que o CRD está pronto para uso
 kubectl wait --for=condition=established crd/ingressroutes.traefik.io --timeout=60s
+
+# 5. GitOps: Clonar Repositório de Stack
+STACK_DIR="$USER_HOME/.stack"
+mkdir -p $STACK_DIR
+
+if [ -n "${github_repo}" ]; then
+  echo "Clonando repositório público: ${github_repo}"
+  git clone "${github_repo}" $STACK_DIR
+  
+  # Substitui placeholders
+  echo "Configurando variáveis nos manifestos..."
+  find $STACK_DIR -name "*.yaml" -type f -exec sed -i "s|<<seu-dominio>>|${domain_name}|g" {} +
+  find $STACK_DIR -name "*.yaml" -type f -exec sed -i "s|<<user-home>>|$USER_HOME|g" {} +
+  
+  chown -R ${user_instance}:${user_instance} $STACK_DIR
+else
+  echo "Nenhum repositório GitHub configurado."
+fi
