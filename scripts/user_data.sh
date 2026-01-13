@@ -93,3 +93,33 @@ else
        curl -H "Content-Type: application/json" -d '{"content": "❌ **FALHA CRÍTICA:** Token do Cloudflare Tunnel inválido ou erro no registro."}' "${discord_webhook_url}"
   fi
 fi
+
+# 4. Instalação do K3s
+export K3S_KUBECONFIG_MODE="644"
+curl -sfL https://get.k3s.io | sh -
+
+# Configurar Kubeconfig para o usuário da instância (ubuntu)
+USER_HOME="/home/${user_instance}"
+mkdir -p $USER_HOME/.kube
+cp /etc/rancher/k3s/k3s.yaml $USER_HOME/.kube/config
+chown -R ${user_instance}:${user_instance} $USER_HOME/.kube
+echo "export KUBECONFIG=$USER_HOME/.kube/config" >> $USER_HOME/.bashrc
+
+# Aguardar K3s API Server estar disponível
+echo "Aguardando K3s API..."
+until kubectl get --raw='/readyz' > /dev/null 2>&1; do 
+  sleep 2
+done
+
+# Aguardar Node ficar Ready (Melhor que sleep fixo)
+echo "Aguardando Node ficar Ready..."
+kubectl wait --for=condition=Ready node --all --timeout=120s
+
+# Aguardar CRDs do Traefik (Existence + Established)
+echo "Aguardando Traefik CRDs..."
+# Loop de existência (kubectl wait falha se objeto não existe)
+until kubectl get crd ingressroutes.traefik.io > /dev/null 2>&1; do 
+  sleep 2
+done
+# Wait para garantir que o CRD está pronto para uso
+kubectl wait --for=condition=established crd/ingressroutes.traefik.io --timeout=60s

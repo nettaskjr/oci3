@@ -1,2 +1,6 @@
 tunel cloudflare
 backend s3
+autenticação no tunel
+segundo hd
+k3s
+
