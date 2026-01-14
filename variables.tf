@@ -127,6 +127,18 @@ variable "cloudflared_version" {
   default     = "2025.11.1"
 }
 
+variable "grafana_admin_user" {
+  description = "Usuário admin inicial do Grafana"
+  type        = string
+  default     = "admin"
+}
+
+variable "grafana_admin_password" {
+  description = "Senha admin inicial do Grafana"
+  type        = string
+  sensitive   = true
+}
+
 variable "data_volume_size_in_gbs" {
   description = "Tamanho do volume de dados persistentes (Block Volume) em GBs"
   type        = number

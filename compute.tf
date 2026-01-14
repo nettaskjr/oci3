@@ -41,6 +41,8 @@ resource "oci_core_instance" "ubuntu_instance" {
       user_instance       = var.user_instance
       github_repo         = var.github_repo
       cloudflared_version = var.cloudflared_version
+      grafana_user        = var.grafana_admin_user
+      grafana_pass        = var.grafana_admin_password
     }))
   }
 
