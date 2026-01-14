@@ -12,7 +12,7 @@ resource "oci_core_volume" "data_volume" {
   # Para destruir a infra sem destruir o volume, use:
   # terraform destroy -target=oci_core_instance.ubuntu_instance
   lifecycle {
-    prevent_destroy = false
+    prevent_destroy = true
   }
 }
 

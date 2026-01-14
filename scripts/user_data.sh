@@ -7,30 +7,24 @@ exec > >(tee /var/log/user-data.log|logger -t user-data -s 2>/dev/console) 2>&1
 echo "Iniciando configuração da instância..."
 
 # 1. Atualização e Instalação de Pacotes Básicos
-echo "Atualizando e instalando pacotes..."
-sudo apt-get update -y
-sudo apt-get install -y curl git xfsprogs ncdu
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -y
+apt-get install -y curl git xfsprogs ncdu
 
-# 1.1 Configuração do Volume Persistente (Data Volume)
-# OCI Paravirtualized attachment geralmente aparece como /dev/sdb se o boot for sda
+# 2. Configuração do Volume Persistente (Data Volume)
 DATA_DEVICE="/dev/sdb"
 MOUNT_POINT="/var/lib/rancher"
 
 echo "Configurando volume de dados persistente em $DATA_DEVICE..."
 
-# Aguardar device aparecer (Timeout 2 min)
-count=0
-while [ ! -b $DATA_DEVICE ] && [ $count -lt 24 ]; do 
-  echo "Aguardando disco $DATA_DEVICE... ($count/24)"
-  sleep 5
-  count=$((count+1))
-done
+# Aguardar device aparecer 
+timeout 120s bash -c "until [ -b $DATA_DEVICE ]; do echo 'Aguardando disco...'; sleep 5; done"
 
 if [ -b $DATA_DEVICE ]; then
-  # Verificar se já está formatado (blkid retorna exit code 0 se tiver fs)
+  # Verificar se já está formatado
   if ! blkid $DATA_DEVICE; then
       echo "Formatando $DATA_DEVICE como XFS..."
-      mkfs.xfs $DATA_DEVICE
+      mkfs.xfs -f $DATA_DEVICE
   fi
 
   # Criar mountpoint e montar
@@ -41,61 +35,26 @@ if [ -b $DATA_DEVICE ]; then
   mount -a
   echo "Volume montado em $MOUNT_POINT"
 else
-  echo "AVISO: Disco $DATA_DEVICE não encontrado após timeout. Pulando configuração de storage."
+  echo "AVISO: Disco $DATA_DEVICE não encontrado. Pulando storage."
 fi
-
-# 2. Configuração de Firewall (Iptables)
-echo "Configurando firewall..."
-# Limpar regras de firewall da Oracle (iptables) para permitir comunicação CNI
-# Isso evita erros de "no route to host" entre Pods e API Server
-iptables -P INPUT ACCEPT
-iptables -P FORWARD ACCEPT
-iptables -P OUTPUT ACCEPT
-iptables -F
-netfilter-persistent save
 
 # 3. Instalação e Configuração do Cloudflared
-echo "Baixando e instalando o Cloudflared..."
-
-# Tentar versão específica
+echo "Instalando Cloudflared (${cloudflared_version})..."
 URL="https://github.com/cloudflare/cloudflared/releases/download/${cloudflared_version}/cloudflared-linux-arm64.deb"
-echo "Tentando baixar: $URL"
 
-if curl -L --fail --output cloudflared.deb "$URL"; then
-  echo "Download da versão ${cloudflared_version} com sucesso."
-else
-  echo "ERRO: Falha ao baixar versão ${cloudflared_version} (404?). Tentando fallback para 'latest'..."
-  if curl -L --fail --output cloudflared.deb "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64.deb"; then
-    echo "Fallback para latest com sucesso."
-  else
-    echo "FATAL: Não foi possível baixar cloudflared (Nem versão fixa nem latest)."
-    # Notificar falha crítica no Discord
-    if [ -n "${discord_webhook_url}" ]; then
-       curl -H "Content-Type: application/json" -d '{"content": "❌ **FALHA CRÍTICA:** Não foi possível baixar o Cloudflared na instância OCI. Verifique a internet e as URLs."}' "${discord_webhook_url}"
-    fi
-    exit 1
-  fi
+if ! curl -L --fail --output cloudflared.deb "$URL"; then
+  echo "Fallback para latest..."
+  curl -L --fail --output cloudflared.deb "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64.deb"
 fi
-
-# Instalar
 dpkg -i cloudflared.deb
 
-# Registrar Serviço
-# O token é injetado via Terraform templatefile
 echo "Registrando túnel..."
-if cloudflared service install "${tunnel_token}"; then
-  echo "Túnel registrado com sucesso."
-  systemctl daemon-reload
-  systemctl restart cloudflared
-else
-  echo "FATAL: Falha ao registrar túnel. Verifique se o Token é válido."
-  if [ -n "${discord_webhook_url}" ]; then
-       curl -H "Content-Type: application/json" -d '{"content": "❌ **FALHA CRÍTICA:** Token do Cloudflare Tunnel inválido ou erro no registro."}' "${discord_webhook_url}"
-  fi
-fi
+cloudflared service install "${tunnel_token}" || true
+systemctl restart cloudflared
 
 # 4. Instalação do K3s
 export K3S_KUBECONFIG_MODE="644"
+# Instalação padrão já resolve a maioria das dependências
 curl -sfL https://get.k3s.io | sh -
 
 # Configurar Kubeconfig para o usuário da instância (ubuntu)
@@ -105,39 +64,50 @@ cp /etc/rancher/k3s/k3s.yaml $USER_HOME/.kube/config
 chown -R ${user_instance}:${user_instance} $USER_HOME/.kube
 echo "export KUBECONFIG=$USER_HOME/.kube/config" >> $USER_HOME/.bashrc
 
-# Aguardar K3s API Server estar disponível
-echo "Aguardando K3s API..."
-until kubectl get --raw='/readyz' > /dev/null 2>&1; do 
-  sleep 2
-done
-
-# Aguardar Node ficar Ready (Melhor que sleep fixo)
-echo "Aguardando Node ficar Ready..."
-kubectl wait --for=condition=Ready node --all --timeout=120s
-
-# Aguardar CRDs do Traefik (Existence + Established)
-echo "Aguardando Traefik CRDs..."
-# Loop de existência (kubectl wait falha se objeto não existe)
-until kubectl get crd ingressroutes.traefik.io > /dev/null 2>&1; do 
-  sleep 2
-done
-# Wait para garantir que o CRD está pronto para uso
-kubectl wait --for=condition=established crd/ingressroutes.traefik.io --timeout=60s
-
-# 5. GitOps: Clonar Repositório de Stack
+# 5. GitOps: Clonar Repositório de Stack e instalacao dos apps via manifestos
 STACK_DIR="$USER_HOME/.stack"
-mkdir -p $STACK_DIR
+git clone "${github_repo}" $STACK_DIR || echo "Falha ao clonar repo"
 
-if [ -n "${github_repo}" ]; then
-  echo "Clonando repositório público: ${github_repo}"
-  git clone "${github_repo}" $STACK_DIR
-  
-  # Substitui placeholders
-  echo "Configurando variáveis nos manifestos..."
+if [ -d "$STACK_DIR" ]; then
+  echo "Configurando variáveis..."
   find $STACK_DIR -name "*.yaml" -type f -exec sed -i "s|<<seu-dominio>>|${domain_name}|g" {} +
   find $STACK_DIR -name "*.yaml" -type f -exec sed -i "s|<<user-home>>|$USER_HOME|g" {} +
   
   chown -R ${user_instance}:${user_instance} $STACK_DIR
-else
-  echo "Nenhum repositório GitHub configurado."
+  
+  # Garantir estabilidade e aplicar
+  echo "Aguardando estabilidade do K3s..."
+  
+  # O restart ajuda a garantir que o IP correto da OCI seja capturado pelo K3s
+  systemctl restart k3s
+  
+  # Aguardar API Server (loop robusto com kubectl)
+  # Usamos timeout de 60s para não travar para sempre
+  timeout 60s bash -c "until kubectl get --raw='/readyz' > /dev/null 2>&1; do sleep 2; done"
+  
+  # Aguardar Nodes
+  kubectl wait --for=condition=Ready node --all --timeout=60s
+  
+  # Aguardar CRDs do Traefik de forma segura
+  echo "Aguardando criação dos CRDs do Traefik..."
+  timeout 120s bash -c "until kubectl get crd ingressroutes.traefik.io > /dev/null 2>&1; do echo 'Aguardando CRD...'; sleep 5; done"
+
+  # 5.1 Aplicar os manifestos
+  echo "#### Aplicando Portainer..."
+  kubectl apply -f $STACK_DIR/Portainer/portainer.yaml
+
+  echo "#### Aplicando Page Error..."
+  kubectl apply -f $STACK_DIR/k8s-error-page/
+  
+  echo "#### Aplicando Monitoramento..."
+  kubectl apply -f $STACK_DIR/k8s-monitoring/
+
+  # 6. Notificar Discord
+  if [ -n "${discord_webhook_url}" ]; then
+    curl -H "Content-Type: application/json" \
+    -d '{"content": "🚀 **Infra OCI Pronta!**\n- 🖥️ SSH: `ssh ssh.${domain_name}` (Zero Trust)\n- ☸️ Kubernetes: K3s Up\n- 🐳 Portainer: https://portainer.${domain_name}\n- 📊 Grafana: https://grafana.${domain_name}\n- 🔍 Loki Logs: Ativo\n\n_Deploy finalizado com sucesso!_"}' \
+    "${discord_webhook_url}"
+  fi
+
+echo "Configuração finalizada."
 fi

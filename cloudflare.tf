@@ -9,7 +9,6 @@ resource "cloudflare_zero_trust_tunnel_cloudflared" "auto_tunnel" {
   secret     = base64sha256(random_password.tunnel_secret.result)
 }
 
-
 resource "cloudflare_record" "cname_wildcard" {
   zone_id = var.cloudflare_zone_id
   name    = "*"

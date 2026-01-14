@@ -3,4 +3,6 @@ backend s3
 autenticação no tunel
 segundo hd
 k3s
-
+GitOps
+Portainer
+Pagina de manutencao no cloudflare

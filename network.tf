@@ -33,16 +33,15 @@ resource "oci_core_security_list" "strict_sl" {
   # Nenhuma regra de ingress é necessária pois a conexão é iniciada de dentro para fora (Egress)
 
   # DEBUG: SSH Temporário
-  ingress_security_rules {
-    protocol = "6" # TCP
-    source   = "0.0.0.0/0"
-    tcp_options {
-      max = 22
-      min = 22
-    }
-    description = "DEBUG: Allow SSH access temporarily"
-  }
-
+  # ingress_security_rules {
+  #   protocol = "6" # TCP
+  #   source   = "0.0.0.0/0"
+  #   tcp_options {
+  #     max = 22
+  #     min = 22
+  #   }
+  #   description = "DEBUG: Allow SSH access temporarily"
+  # }
 
   # Egress: Permitir todo tráfego de saída (necessário para o Cloudflared)
   egress_security_rules {
