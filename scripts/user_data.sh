@@ -66,7 +66,7 @@ if [ -d "$STACK_DIR" ]; then
   echo "Aguardando criação dos CRDs do Traefik..."
   timeout 120s bash -c "until kubectl get crd ingressroutes.traefik.io > /dev/null 2>&1; do echo 'Aguardando CRD...'; sleep 5; done"
   
-  # 5. Aplicar os manifestos
+  # Aplicar os manifestos
   echo "#### Aplicando Portainer..."
   kubectl apply -f $STACK_DIR/Portainer/portainer.yaml
 
@@ -75,15 +75,15 @@ if [ -d "$STACK_DIR" ]; then
   
   echo "#### Aplicando Monitoramento..."
   kubectl apply -f $STACK_DIR/k8s-monitoring/
-
-  # 8. Notificar Discord
-  if [ -n "${discord_webhook_url}" ]; then
-    curl -H "Content-Type: application/json" \
-    -d '{"content": "🚀 **Infra OCI Pronta!**\n- 🖥️ SSH: `ssh ssh.${domain_name}` (Zero Trust)\n- ☸️ Kubernetes: K3s Up\n- 🐳 Portainer: https://portainer.${domain_name}\n- 📊 Grafana: https://grafana.${domain_name}\n- 🔍 Loki Logs: Ativo\n\n_Deploy finalizado com sucesso!_"}' \
-    "${discord_webhook_url}"
-  fi
-
-  echo "Configuração finalizada."
 else
   echo "Repositório de Stack não encontrado."
 fi
+
+# 5. Notificar Discord
+if [ -n "${discord_webhook_url}" ]; then
+  curl -H "Content-Type: application/json" \
+  -d '{"content": "🚀 **Infra OCI Pronta!**\n- 🖥️ SSH: `ssh ssh.${domain_name}` (Zero Trust)\n- ☸️ Kubernetes: K3s Up\n- 🐳 Portainer: https://portainer.${domain_name}\n- 📊 Grafana: https://grafana.${domain_name}\n- 🔍 Loki Logs: Ativo\n\n_Deploy finalizado com sucesso!_"}' \
+  "${discord_webhook_url}"
+fi
+
+echo "Configuração finalizada."
