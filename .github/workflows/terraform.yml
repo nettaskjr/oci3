@@ -45,6 +45,9 @@ jobs:
       # Chaves Publicas ssh
       SSH_PUBLIC_KEY: ${{ secrets.SSH_PUBLIC_KEY }}
 
+      # Senha Grafana
+      TF_VAR_grafana_admin_password: ${{ secrets.TF_VAR_GRAFANA_ADMIN_PASSWORD }}
+
       # Cloudflare Token (Sensível)
       TF_VAR_cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
 
@@ -92,14 +95,14 @@ jobs:
         if: github.ref == 'refs/heads/main' && github.event_name == 'push' && github.event.inputs.terraform_action != 'destroy'
         run: terraform apply -auto-approve -input=false
 
-      # Destroy apenas a instância (preservando storage e rede)
+      # Destroy full da infraestrutura
       - name: Terraform Dispatch Action
         if: github.event_name == 'workflow_dispatch'
         run: |
           ACTION="${{ github.event.inputs.terraform_action }}"
           if [ "$ACTION" == "destroy" ]; then
-            echo "⚠️ Executando Destroy direcionado APENAS à instância (Preservando Storage e Rede)..."
-            terraform destroy -auto-approve -input=false -target=oci_core_instance.ubuntu_instance
+            echo "⚠️ Executando Destroy COMPLETO da infraestrutura..."
+            terraform destroy -auto-approve -input=false
           else
             terraform $ACTION -auto-approve -input=false
           fi
