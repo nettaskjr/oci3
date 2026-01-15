@@ -11,7 +11,7 @@ terraform {
   }
 
   backend "s3" {
-    key = "oci-infra/terraform.tfstate"
+    key = "terraform-state-oci/terraform.tfstate"
   }
 
 }

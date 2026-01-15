@@ -1,8 +1,11 @@
-tunel cloudflare
-backend s3
-autenticação no tunel
-segundo hd
-k3s
-GitOps
-Portainer
-Pagina de manutencao no cloudflare
+- [x] tunel cloudflare
+- [x] backend s3
+- [ ] autenticação no tunel
+- [x] k3s
+- [x] GitOps
+- [x] Portainer
+- [x] monitoramento (Instalado)
+- [x] Pagina de manutencao (Instalado/A Validar)
+- [ ] backup (Novo foco)
+- [ ] github actions (cI/cD) (Novo foco)
+
