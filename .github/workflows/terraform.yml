@@ -1,0 +1,128 @@
+name: "Terraform Infrastructure"
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      terraform_action:
+        description: "Ação do Terraform"
+        required: true
+        default: "apply"
+        type: choice
+        options:
+          - apply
+          - destroy
+
+jobs:
+  terraform:
+    name: "Terraform"
+    runs-on: ubuntu-latest
+
+    # ... (env vars mantidos) ...
+    # É aqui que a mágica acontece. Mapeamos os Secrets do GitHub para variáveis de ambiente
+    # que o Terraform entende (TF_VAR_nome_da_variavel).
+    env:
+      # Credenciais AWS para o Backend S3 (Apenas autenticação)
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+      # Bucket S3
+      TF_VAR_state_bucket_name: ${{ secrets.TF_STATE_BUCKET_NAME }}
+
+      # Variáveis do Terraform (TF_VAR_)
+      # As demais variáveis (region, email, domain) estão configuradas em terraform.auto.tfvars
+      TF_VAR_tenancy_ocid: ${{ secrets.OCI_TENANCY_OCID }}
+      TF_VAR_user_ocid: ${{ secrets.OCI_USER_OCID }}
+      TF_VAR_compartment_ocid: ${{ secrets.OCI_COMPARTMENT_OCID }}
+      TF_VAR_fingerprint: ${{ secrets.OCI_FINGERPRINT }}
+
+      # Chaves Privadas
+      OCI_PRIVATE_KEY_CONTENT: ${{ secrets.OCI_PRIVATE_KEY_PEM }}
+
+      # Chaves Publicas ssh
+      SSH_PUBLIC_KEY: ${{ secrets.SSH_PUBLIC_KEY }}
+
+      # Cloudflare Token (Sensível)
+      TF_VAR_cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.9.0
+
+      # Passo extra para criar os arquivos de chave a partir dos secrets
+      - name: Setup OCI Keys
+        run: |
+          mkdir -p ~/.oci
+          echo "$OCI_PRIVATE_KEY_CONTENT" > ~/.oci/oci_api_key.pem
+          chmod 600 ~/.oci/oci_api_key.pem
+          # Precisamos dizer ao Terraform onde a chave está
+          echo "TF_VAR_api_private_key_path=~/.oci/oci_api_key.pem" >> $GITHUB_ENV
+
+          # SSH Public Key (se precisar criar a instância com ela)
+          mkdir -p ~/.ssh
+          echo "$SSH_PUBLIC_KEY" > ~/.ssh/id_rsa.pub
+          echo "TF_VAR_ssh_public_key_path=~/.ssh/id_rsa.pub" >> $GITHUB_ENV
+
+      - name: Terraform Init
+        id: init
+        run: |
+          terraform init \
+            -backend-config="bucket=$TF_VAR_state_bucket_name" \
+            -backend-config="region=us-east-1"
+
+      - name: Terraform Validate
+        id: validate
+        run: terraform validate -no-color
+
+      - name: Terraform Plan
+        id: plan
+        if: github.event_name == 'pull_request'
+        run: terraform plan -no-color -input=false
+        continue-on-error: true
+
+      - name: Terraform Apply
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push' && github.event.inputs.terraform_action != 'destroy'
+        run: terraform apply -auto-approve -input=false
+
+      # Destroy apenas a instância (preservando storage e rede)
+      - name: Terraform Dispatch Action
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          ACTION="${{ github.event.inputs.terraform_action }}"
+          if [ "$ACTION" == "destroy" ]; then
+            echo "⚠️ Executando Destroy direcionado APENAS à instância (Preservando Storage e Rede)..."
+            terraform destroy -auto-approve -input=false -target=oci_core_instance.ubuntu_instance
+          else
+            terraform $ACTION -auto-approve -input=false
+          fi
+
+      - name: Notify Discord
+        if: always() && (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch')
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          STATUS: ${{ job.status }}
+          ACTION: ${{ github.event.inputs.terraform_action || 'apply' }}
+        run: |
+          if [ -z "$DISCORD_WEBHOOK_URL" ]; then echo "No Discord Webhook configured"; exit 0; fi
+
+          if [ "$STATUS" == "success" ]; then
+            COLOR=3066993 # Green
+            TITLE="✅ Terraform $ACTION Success"
+            DESC="Ação de **$ACTION** executada com sucesso na branch main."
+          else
+            COLOR=15158332 # Red
+            TITLE="❌ Terraform $ACTION Failed"
+            DESC="Houve um erro ao executar **$ACTION**. Verifique os logs do GitHub Actions."
+          fi
+
+          curl -H "Content-Type: application/json" \
+            -d "{\"embeds\": [{\"title\": \"$TITLE\", \"description\": \"$DESC\", \"color\": $COLOR}]}" \
+            "$DISCORD_WEBHOOK_URL"
