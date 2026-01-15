@@ -4,7 +4,15 @@
 # Log de execução para debug
 exec > >(tee /var/log/user-data.log|logger -t user-data -s 2>/dev/console) 2>&1
 
-echo "Iniciando configuração da instância (Branch Persistencia)..."
+# Função de Notificação Discord
+notify_discord() {
+  local MESSAGE="$1"
+  if [ -n "${discord_webhook_url}" ]; then
+    curl -H "Content-Type: application/json" -d "{\"content\": \"$MESSAGE\"}" "${discord_webhook_url}" || true
+  fi
+}
+
+echo "Iniciando configuração da instância (Branch Main/Stateless)..."
 
 # 1. Atualização e Instalação de Pacotes Básicos
 export DEBIAN_FRONTEND=noninteractive
@@ -24,6 +32,9 @@ dpkg -i cloudflared.deb
 echo "Registrando túnel..."
 cloudflared service install "${tunnel_token}" || true
 systemctl restart cloudflared
+
+# Notificar Discord sobre SSH (Túnel UP)
+notify_discord "⏳ **Cloudflare Tunnel UP!**\n- 🖥️ SSH disponível: \`ssh ssh.${domain_name}\`\n- 🔄 Aguardando setup do Kubernetes..."
 
 # 3. Instalação do K3s
 export K3S_KUBECONFIG_MODE="644"
@@ -79,11 +90,12 @@ else
   echo "Repositório de Stack não encontrado."
 fi
 
-# 5. Notificar Discord
-if [ -n "${discord_webhook_url}" ]; then
-  curl -H "Content-Type: application/json" \
-  -d '{"content": "🚀 **Infra OCI Pronta!**\n- 🖥️ SSH: `ssh ssh.${domain_name}` (Zero Trust)\n- ☸️ Kubernetes: K3s Up\n- 🐳 Portainer: https://portainer.${domain_name}\n- 📊 Grafana: https://grafana.${domain_name}\n- 🔍 Loki Logs: Ativo\n\n_Deploy finalizado com sucesso!_"}' \
-  "${discord_webhook_url}"
-fi
+# 5. Validação de Saúde dos Pods
+echo "Aguardando pods ficarem prontos (timeout 300s)..."
+kubectl wait --for=condition=ready pod --all -n portainer --timeout=300s || notify_discord "❌ Aviso: Nem todos os pods do Portainer ficaram prontos a tempo."
+kubectl wait --for=condition=ready pod --all -n monitoring --timeout=300s || notify_discord "❌ Aviso: Nem todos os pods de Monitoramento ficaram prontos a tempo."
+
+# 6. Notificar Discord Final
+notify_discord "🚀 **Infra OCI Pronta & Validada!**\n- 🖥️ SSH: \`ssh ssh.${domain_name}\` (Zero Trust)\n- ☸️ Kubernetes: K3s Up\n- 🐳 Portainer: https://portainer.${domain_name} (Pods Ready)\n- 📊 Grafana: https://grafana.${domain_name} (Pods Ready)\n\n_Deploy e Health Check finalizados com sucesso!_"
 
 echo "Configuração finalizada."
