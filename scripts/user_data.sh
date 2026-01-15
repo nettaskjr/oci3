@@ -96,6 +96,6 @@ kubectl wait --for=condition=ready pod --all -n portainer --timeout=300s || noti
 kubectl wait --for=condition=ready pod --all -n monitoring --timeout=300s || notify_discord "❌ Aviso: Nem todos os pods de Monitoramento ficaram prontos a tempo."
 
 # 6. Notificar Discord Final
-notify_discord "🚀 **Infra OCI Pronta & Validada!**\n- 🖥️ SSH: \`ssh ssh.${domain_name}\` (Zero Trust)\n- ☸️ Kubernetes: K3s Up\n- 🐳 Portainer: https://portainer.${domain_name} (Pods Ready)\n- 📊 Grafana: https://grafana.${domain_name} (Pods Ready)\n\n_Deploy e Health Check finalizados com sucesso!_"
+notify_discord "🚀 **Infra OCI Pronta (veja se tem alguma msg acima de falha)!**\n- 🖥️ SSH: \`ssh ssh.${domain_name}\` (Zero Trust)\n- ☸️ Kubernetes: K3s Up\n- 🐳 Portainer: https://portainer.${domain_name} (Pods Ready)\n- 📊 Grafana: https://grafana.${domain_name} (Pods Ready)\n\n_Deploy e Health Check finalizados com sucesso!_"
 
 echo "Configuração finalizada."
