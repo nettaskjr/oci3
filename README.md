@@ -63,7 +63,7 @@ Vá em **Settings** > **Secrets and variables** > **Actions** > **New repository
 | `OCI_PRIVATE_KEY_PEM` | Conteúdo da chave privada `.pem` | Sua chave local gerada para API OCI |
 | `CLOUDFLARE_API_TOKEN` | Token da API Cloudflare | Dash Cloudflare (Profile > API Tokens) |
 | `OCI_COMPARTMENT_OCID` | ID do Compartimento | Console OCI (Identity > Compartments) |
-| `TF_STATE_BUCKET_NAME`| Nome do bucket S3 criado | Ex: `terraform-state-nettask.com.br` |
+| `TF_STATE_BUCKET_NAME`| Nome do bucket S3 criado | Ex: `terraform-state-seu-dominio.com.br` |
 | `TF_VAR_GRAFANA_ADMIN_PASSWORD` | Senha inicial para o usuário `admin` do Grafana | Você define (Sua escolha) |
 
 > **Dica:** O Token da Cloudflare precisa das permissões: *Zone:Properties (Read)*, *Account:Tunnel (Read/Write)* e *DNS (Read/Write)*.
@@ -128,7 +128,23 @@ Adicione estes segredos além dos listados acima:
 
 ---
 
-### 6. Observabilidade e Monitoramento 📊
+### 6. Gerenciamento de Containers (Portainer) 🐳
+
+O Portainer CE foi incluído para facilitar o gerenciamento visual do cluster Kubernetes e dos containers Docker.
+
+**Acesso:**
+*   **URL:** `https://portainer.seu-dominio.com.br`
+*   **Primeiro Acesso:** Defina a senha do usuário `admin` na tela inicial.
+
+**Funcionalidades:**
+*   Visualização de Pods, Deployments e Services.
+*   Logs dos containers em tempo real.
+*   Console/Shell direto no container (Exec).
+*   Gestão facilitada de namespaces.
+
+---
+
+### 7. Observabilidade e Monitoramento 📊
 
 Esta infraestrutura já nasce com uma stack completa de monitoramento baseada em Prometheus e Grafana.
 
@@ -154,7 +170,7 @@ Esta infraestrutura já nasce com uma stack completa de monitoramento baseada em
 
 ---
 
-### 7. Pós-Deploy e Acesso Zero Trust
+### 8. Pós-Deploy e Acesso Zero Trust
 
 *   **Automação:** O script de inicialização (`scripts/user_data.sh`) é injetado via `compute.tf` e instala automaticamente:
     *   `cloudflared` (Túnel) com fallback automático
@@ -170,7 +186,7 @@ Esta infraestrutura já nasce com uma stack completa de monitoramento baseada em
     ssh ssh.seu-dominio.com.br
     ```
 
-### 8. Operações "Day 2" (Manutenção)
+### 9. Operações "Day 2" (Manutenção)
 
 #### Reiniciar Instância OCI
 Se precisar reiniciar o servidor (travamento, kernel update), não use o painel da Oracle. Use o GitHub Actions:
