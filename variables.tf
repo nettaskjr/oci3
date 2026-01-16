@@ -138,14 +138,3 @@ variable "grafana_admin_password" {
   type        = string
   sensitive   = true
 }
-
-variable "data_volume_size_in_gbs" {
-  description = "Tamanho do volume de dados persistentes (Block Volume) em GBs"
-  type        = number
-  default     = 100
-
-  validation {
-    condition     = var.data_volume_size_in_gbs >= 50
-    error_message = "O volume de dados deve ter no mínimo 50 GB."
-  }
-}

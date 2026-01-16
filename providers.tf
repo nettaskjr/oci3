@@ -13,7 +13,6 @@ terraform {
   backend "s3" {
     key = "terraform-state-oci/terraform.tfstate"
   }
-
 }
 
 provider "oci" {
