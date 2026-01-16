@@ -64,6 +64,7 @@ Vá em **Settings** > **Secrets and variables** > **Actions** > **New repository
 | `CLOUDFLARE_API_TOKEN` | Token da API Cloudflare | Dash Cloudflare (Profile > API Tokens) |
 | `OCI_COMPARTMENT_OCID` | ID do Compartimento | Console OCI (Identity > Compartments) |
 | `TF_STATE_BUCKET_NAME`| Nome do bucket S3 criado | Ex: `terraform-state-nettask.com.br` |
+| `TF_VAR_GRAFANA_ADMIN_PASSWORD` | Senha inicial para o usuário `admin` do Grafana | Você define (Sua escolha) |
 
 > **Dica:** O Token da Cloudflare precisa das permissões: *Zone:Properties (Read)*, *Account:Tunnel (Read/Write)* e *DNS (Read/Write)*.
 
@@ -79,7 +80,7 @@ region            = "sa-saopaulo-1"
 domain_name       = "nettask.com.br"
 cloudflare_zone_id = "xxx..." 
 cloudflare_account_id = "xxx..." # ID da Conta (Account ID)
-email             = "seu@email.com"
+github_repo       = "https://github.com/nettaskjr/manifestos-kubernetes.git" # Repositório com os manifestos K8s
 state_bucket_name = "terraform-state-nettask.com.br" # Apenas referência para variável, o backend usa a config do init
 ```
 
@@ -144,7 +145,7 @@ Esta infraestrutura já nasce com uma stack completa de monitoramento baseada em
 
 **Acesso:**
 *   **URL:** `https://grafana.seu-dominio.com.br`
-*   **Credenciais Padrão:** `admin` / `admin` (Altere no primeiro login!)
+*   **Credenciais Padrão:** `admin` / `TF_VAR_GRAFANA_ADMIN_PASSWORD`
 
 **Dashboards Pré-Instalados:**
 1.  **Kubernetes Cluster (ID 15757):** Visão geral de CPU/Memória/Pods do cluster.
@@ -157,7 +158,6 @@ Esta infraestrutura já nasce com uma stack completa de monitoramento baseada em
 
 *   **Automação:** O script de inicialização (`scripts/user_data.sh`) é injetado via `compute.tf` e instala automaticamente:
     *   `cloudflared` (Túnel) com fallback automático
-    *   Setup de Storage Persistente (Volume OCI => `/var/lib/rancher`)
     *   `k3s` (Kubernetes)
     *   Stack de Monitoramento
     *   Portainer
@@ -189,9 +189,8 @@ Use o workflow **Terraform Infrastructure** com a opção `destroy`.
 *   `network.tf`: VCN e Firewall (Bloqueia tudo, libera apenas Egress e subrede interna).
 *   `compute.tf`: Instância (ARM64) + Chamada para o script de boot.
 *   `scripts/user_data.sh`: Script BASH mestre de instalação (Executado no primeiro boot).
-*   `storage.tf`: Configuração do Block Volume persistente (montado em `/var/lib/rancher`).
 *   `cloudflare.tf`: Criação do Túnel Zero Trust e DNS.
-*   `k8s-monitoring/*.yaml`: Manifestos da stack de observabilidade.
+*   **Manifestos K8s (GitOps)**: Os arquivos de deploy (`k8s-monitoring`, `Portainer`, etc.) são baixados automaticamente do repositório definido em `github_repo` pelo script `user_data.sh`.
 
 ---
 
